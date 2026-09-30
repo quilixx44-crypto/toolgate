@@ -1,0 +1,15 @@
+{
+  "name": "toolgate",
+  "version": "1.0.0",
+  "description": "Zero-trust security gateway for AI agent tool calls",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "agent": "node agent-sim.js",
+    "test": "node --disable-warning=ExperimentalWarning test.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "license": "MIT"
+}

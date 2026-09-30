@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ToolGate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: header + stat strip, tabbed workspace. Attack lab splits request | verdict on wide screens; the verdict's checkpoint track is the one bold element. */
+:root{
+  --bg:#f4f5f9; --panel:#ffffff; --raised:#eceef5; --line:#d9dde8; --fg:#151823; --mut:#5b6275;
+  --acc:#4050d0; --ok:#0d8a57; --warn:#a86a0c; --bad:#cf2e45;
+  --ok-bg:rgba(13,138,87,.1); --warn-bg:rgba(168,106,12,.12); --bad-bg:rgba(207,46,69,.1);
+  --display:'Chakra Petch','IBM Plex Sans',system-ui,sans-serif;
+  --body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1117; --panel:#161922; --raised:#1e2230; --line:#2a2f3e; --fg:#e8eaf1; --mut:#949bb0;
+  --acc:#8d9bff; --ok:#3fcf8e; --warn:#f2b640; --bad:#ff6275;
+  --ok-bg:rgba(63,207,142,.12); --warn-bg:rgba(242,182,64,.13); --bad-bg:rgba(255,98,117,.13); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1117; --panel:#161922; --raised:#1e2230; --line:#2a2f3e; --fg:#e8eaf1; --mut:#949bb0;
+  --acc:#8d9bff; --ok:#3fcf8e; --warn:#f2b640; --bad:#ff6275;
+  --ok-bg:rgba(63,207,142,.12); --warn-bg:rgba(242,182,64,.13); --bad-bg:rgba(255,98,117,.13); color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--body);
+  padding-block:calc(env(safe-area-inset-top,0px) + 14px) calc(env(safe-area-inset-bottom,0px) + 40px)}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;display:grid;gap:14px}
+h1,h2,h3{margin:0;text-wrap:balance}
+button,select,input,textarea{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 14px;min-height:40px;font-weight:600;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);border-color:var(--acc);color:var(--bg)}
+button.ghost{background:none}
+button.danger{color:var(--bad)}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+select,input{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-height:40px}
+code,pre,textarea.code{font-family:var(--mono);font-size:13px}
+.mut{color:var(--mut)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* header */
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;gap:12px;align-items:center}
+.brand svg{width:40px;height:40px;flex:none}
+.brand h1{font:700 26px/1 var(--display);letter-spacing:.01em}
+.brand p{margin:2px 0 0;color:var(--mut);font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:99px;padding:4px 11px;font-size:12.5px;color:var(--mut);background:var(--panel)}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--mut)}
+.chip.live i{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.chip.live{color:var(--fg)}
+
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.stats div{background:var(--panel);padding:10px 14px}
+.stats b{display:block;font:700 24px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.stats small{color:var(--mut);font-size:12px}
+.stats .s-block b{color:var(--bad)} .stats .s-review b{color:var(--warn)} .stats .s-allow b{color:var(--ok)}
+@media (max-width:640px){.stats{grid-template-columns:repeat(3,minmax(0,1fr))}.stats div:nth-child(n+4){display:none}}
+
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+nav.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--mut);padding:10px 12px;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--acc)}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:12px;min-width:0;align-content:start}
+.lab{align-items:start}
+.panel h2{font:700 18px var(--display)}
+.panel h3{font-size:14px;font-weight:600}
+
+/* attack lab */
+.lab{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:960px){.lab{grid-template-columns:minmax(0,1fr) minmax(0,1.05fr)}}
+textarea.code{width:100%;min-height:280px;resize:vertical;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;line-height:1.55}
+.scen{display:grid;gap:6px}
+.scen label{font-size:13px;color:var(--mut)}
+.scen select{width:100%}
+.hint{font-size:13px;color:var(--mut);margin:0}
+
+.verdict{display:grid;gap:14px}
+.vhead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.word{font:700 44px/0.95 var(--display);letter-spacing:.02em}
+.word.ALLOW{color:var(--ok)} .word.BLOCK{color:var(--bad)} .word.REVIEW{color:var(--warn)}
+.vmeta{display:flex;gap:18px;text-align:right}
+.vmeta b{display:block;font:700 20px var(--display);font-variant-numeric:tabular-nums}
+.vmeta small{color:var(--mut);font-size:12px}
+.reason{margin:0;font-size:14.5px}
+.meter{height:6px;border-radius:6px;background:var(--raised);overflow:hidden}
+.meter i{display:block;height:100%;background:linear-gradient(90deg,var(--ok),var(--warn),var(--bad));transition:width .4s}
+
+.track{list-style:none;margin:0;padding:0;display:grid}
+.track>li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;position:relative;padding-bottom:12px}
+.track>li:not(:last-child)::before{content:"";position:absolute;left:13px;top:26px;bottom:0;width:2px;background:var(--line)}
+.node{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:700 12px var(--mono);border:2px solid var(--line);background:var(--panel);color:var(--mut)}
+.track>li.pass .node{border-color:var(--ok);color:var(--ok)}
+.track>li.info .node{border-color:var(--acc);color:var(--acc)}
+.track>li.review .node{border-color:var(--warn);background:var(--warn-bg);color:var(--warn)}
+.track>li.block .node{border-color:var(--bad);background:var(--bad);color:var(--panel)}
+.track>li.skip{opacity:.45}
+.sname{font-weight:600;font-size:14px;padding-top:3px}
+.sname span{font-weight:500;font-size:12.5px;margin-left:6px}
+.pass .sname span{color:var(--ok)} .info .sname span{color:var(--acc)} .review .sname span{color:var(--warn)} .block .sname span{color:var(--bad)}
+.find{margin:4px 0 0;padding:0;list-style:none;font-size:13.5px;color:var(--mut);display:grid;gap:3px}
+.find b{color:var(--fg);font-weight:600}
+.box{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:6px;min-width:0}
+.box h3{font-size:13px;color:var(--mut);font-weight:600}
+.box pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.dec-row{display:grid;gap:2px}
+.dec-row small{color:var(--mut);font-family:var(--mono);font-size:12px}
+.dec-row .from{text-decoration:line-through;color:var(--mut)}
+
+/* pills and tables */
+.pill{display:inline-block;font:600 11.5px/1 var(--mono);padding:5px 8px;border-radius:99px;letter-spacing:.03em}
+.pill.ALLOW{background:var(--ok-bg);color:var(--ok)} .pill.BLOCK{background:var(--bad-bg);color:var(--bad)} .pill.REVIEW{background:var(--warn-bg);color:var(--warn)}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-weight:600;font-size:12.5px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+
+.log{display:grid;gap:8px}
+.log details{border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.log summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 12px}
+.log summary::-webkit-details-marker{display:none}
+.log .who{font-weight:600;font-size:14px}
+.log .why{color:var(--mut);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.log .when{color:var(--mut);font:12px var(--mono);text-align:right}
+.log .body{padding:0 12px 12px;display:grid;gap:8px}
+.empty{padding:28px 16px;text-align:center;color:var(--mut);border:1px dashed var(--line);border-radius:12px}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px}
+.tile b{display:block;font:700 28px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.tile small{color:var(--mut);font-size:12.5px}
+.tile.good b{color:var(--ok)}
+.bar{height:6px;background:var(--raised);border-radius:6px;overflow:hidden;min-width:80px}
+.bar i{display:block;height:100%;background:var(--ok)}
+.cm{display:grid;grid-template-columns:auto 1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;max-width:420px;font-size:13.5px}
+.cm div{background:var(--panel);padding:8px 10px}
+.cm .h{color:var(--mut);font-size:12.5px}
+.cm .v{font:700 20px var(--display);font-variant-numeric:tabular-nums}
+.ok{color:var(--ok)} .bad{color:var(--bad)}
+.badge{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:99px;background:var(--warn);color:var(--bg);font:700 11.5px/1 var(--mono);margin-left:6px}
+.pill.pending{background:var(--warn-bg);color:var(--warn)} .pill.approved{background:var(--ok-bg);color:var(--ok)} .pill.rejected{background:var(--bad-bg);color:var(--bad)}
+.req{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:10px;background:var(--bg);min-width:0}
+.req-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+.req-head b{font-size:15px}
+.req .why{margin:0;font-size:14px}
+button.approve{border-color:var(--ok);color:var(--ok)} button.reject{border-color:var(--bad);color:var(--bad)}
+.held{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid var(--warn);background:var(--warn-bg);border-radius:10px;padding:10px 12px}
+.held p{margin:0;font-size:14px}
+
+.agents{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.agent{border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:8px;background:var(--bg)}
+.agent h3{font:700 16px var(--mono)}
+.tags{display:flex;gap:5px;flex-wrap:wrap}
+.tag{font:12px var(--mono);background:var(--raised);border-radius:6px;padding:3px 7px}
+.kv{font-size:13px;display:grid;gap:3px}
+.kv span{color:var(--mut)}
+
+.arch svg{width:100%;height:auto;max-width:1000px}
+.arch svg text{font-family:var(--body);fill:var(--fg)}
+.arch svg .sub{fill:var(--mut);font-size:11px}
+.arch svg .box{fill:var(--panel);stroke:var(--line)}
+.arch svg .gate{fill:var(--raised);stroke:var(--acc)}
+.arch svg .line{stroke:var(--mut);fill:none;stroke-width:1.5}
+.arch svg .lbad{stroke:var(--bad)} .arch svg .lok{stroke:var(--ok)}
+.cols{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.cols ul{margin:0;padding-left:18px;display:grid;gap:4px;font-size:14px}
+
+.login{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;padding:16px;z-index:5}
+.login form{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;width:min(380px,100%);display:grid;gap:12px}
+.login h2{font:700 22px var(--display)}
+.err{color:var(--bad);font-size:13.5px;margin:0}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:9;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="login" id="login" hidden>
+  <form id="loginForm">
+    <h2>Sign in to ToolGate</h2>
+    <p class="mut" style="margin:0">Admin access to the gateway dashboard.</p>
+    <label for="pw" class="mut" style="font-size:13px">Admin password</label>
+    <input id="pw" type="password" autocomplete="current-password" required>
+    <p class="err" id="loginErr" hidden></p>
+    <button class="primary" type="submit">Sign in</button>
+  </form>
+</div>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="1" y="1" width="38" height="38" rx="10" fill="var(--acc)"/><path d="M11 29V15h4v14M25 29V15h4v14M9 13h22" stroke="var(--bg)" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M15 21h10" stroke="var(--bg)" stroke-width="3" stroke-linecap="round"/></svg>
+      <div><h1>ToolGate</h1><p>Zero-trust gateway for AI agent tool calls</p></div>
+    </div>
+    <div class="row">
+      <span class="chip" id="modeChip"><i></i><span>Offline demo</span></span>
+      <button class="ghost" id="logoutBtn" hidden>Sign out</button>
+    </div>
+  </header>
+
+  <div class="stats" aria-label="Gateway totals">
+    <div><b id="stTotal">0</b><small>Calls checked</small></div>
+    <div class="s-block"><b id="stBlock">0</b><small>Blocked</small></div>
+    <div class="s-review"><b id="stReview">0</b><small>Sent for review</small></div>
+    <div class="s-allow"><b id="stAllow">0</b><small>Allowed</small></div>
+    <div><b id="stLat">0</b><small>Avg latency (ms)</small></div>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="lab" aria-selected="true">Attack lab</button>
+    <button role="tab" data-tab="approvals" aria-selected="false">Approvals<span class="badge" id="pendBadge" hidden>0</span></button>
+    <button role="tab" data-tab="audit" aria-selected="false">Audit log</button>
+    <button role="tab" data-tab="eval" aria-selected="false">Evaluation</button>
+    <button role="tab" data-tab="policy" aria-selected="false">Policy</button>
+    <button role="tab" data-tab="arch" aria-selected="false">Architecture</button>
+  </nav>
+
+  <!-- ATTACK LAB -->
+  <section data-view="lab" class="lab">
+    <div class="panel">
+      <h2>Tool call</h2>
+      <div class="scen">
+        <label for="scenario">Load a scenario</label>
+        <select id="scenario"></select>
+      </div>
+      <textarea id="req" class="code" spellcheck="false" aria-label="Tool call JSON"></textarea>
+      <div class="row">
+        <button class="primary" id="sendBtn">Send through gateway</button>
+        <button id="randomBtn">Random attack</button>
+        <button class="ghost" id="fmtBtn">Format JSON</button>
+      </div>
+      <p class="hint">Edit anything, or write your own attack. The request goes through all seven checks before the tool is allowed to run.</p>
+    </div>
+    <div class="panel verdict" id="verdict" aria-live="polite"></div>
+  </section>
+
+  <!-- APPROVALS -->
+  <section data-view="approvals" class="panel" hidden>
+    <div><h2>Approvals</h2><p class="hint">Calls flagged for review wait here. Nothing runs until an admin approves it; a rejected call is blocked for good. Every decision is added to the audit log.</p></div>
+    <div class="log" id="pendList"></div>
+    <h3 style="margin-top:8px">Recently decided</h3>
+    <div class="log" id="doneList"></div>
+  </section>
+
+  <!-- AUDIT -->
+  <section data-view="audit" class="panel" hidden>
+    <div class="row" style="justify-content:space-between">
+      <h2>Audit log</h2>
+      <div class="row">
+        <select id="auditFilter" aria-label="Filter decisions"><option value="">All decisions</option><option value="BLOCK">Blocked</option><option value="REVIEW">Review</option><option value="ALLOW">Allowed</option></select>
+        <button id="verifyBtn">Verify integrity</button>
+        <button id="copyAuditBtn">Copy as JSON</button>
+        <button class="danger" id="clearBtn">Clear log</button>
+        <button class="danger" id="clearYes" hidden>Yes, clear it</button>
+      </div>
+    </div>
+    <p class="hint" id="auditNote"></p>
+    <div class="log" id="auditList"></div>
+  </section>
+
+  <!-- EVAL -->
+  <section data-view="eval" class="panel" hidden>
+    <div class="row" style="justify-content:space-between">
+      <div><h2>Evaluation</h2><p class="hint" id="evalNote">Runs a labelled test set of safe calls and attacks through the current policy.</p></div>
+      <button class="primary" id="evalBtn">Run test suite</button>
+    </div>
+    <div class="tiles" id="evalTiles"></div>
+    <div class="cols">
+      <div class="panel" style="padding:12px"><h3>Confusion matrix</h3><div id="cm"></div></div>
+      <div class="panel" style="padding:12px"><h3>By attack category</h3><div class="scroll"><table id="catTable"></table></div></div>
+    </div>
+    <details><summary class="mut" style="cursor:pointer">All test cases</summary><div class="scroll" style="margin-top:10px"><table id="caseTable"></table></div></details>
+  </section>
+
+  <!-- POLICY -->
+  <section data-view="policy" class="panel" hidden>
+    <div><h2>Policy</h2><p class="hint" id="policyNote"></p></div>
+    <div class="agents" id="agentCards"></div>
+    <details id="policyEdit">
+      <summary style="cursor:pointer;font-weight:600">Edit policy JSON</summary>
+      <div style="display:grid;gap:10px;margin-top:10px">
+        <textarea id="policyText" class="code" spellcheck="false" style="min-height:360px" aria-label="Policy JSON"></textarea>
+        <div class="row"><button class="primary" id="savePolicyBtn">Save policy</button><button id="resetPolicyBtn">Reset to default</button></div>
+        <p class="err" id="policyErr" hidden></p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section data-view="arch" class="panel arch" hidden>
+    <h2>Architecture</h2>
+    <svg viewBox="0 0 1000 400" role="img" aria-label="ToolGate architecture diagram">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--mut)"/></marker></defs>
+      <rect class="box" x="10" y="150" width="150" height="70" rx="10"/>
+      <text x="85" y="180" text-anchor="middle" font-weight="600">AI agent</text>
+      <text x="85" y="199" text-anchor="middle" class="sub">tool call + API key</text>
+      <path class="line" d="M160 185H215" marker-end="url(#ar)"/>
+      <rect class="gate" x="220" y="20" width="390" height="330" rx="14"/>
+      <text x="415" y="48" text-anchor="middle" font-weight="700" font-size="16">ToolGate proxy</text>
+      <g font-size="13">
+        <rect class="box" x="245" y="62" width="340" height="30" rx="7"/><text x="260" y="82">1  Identity and permission (least privilege)</text>
+        <rect class="box" x="245" y="98" width="340" height="30" rx="7"/><text x="260" y="118">2  Parameter schema and smuggling checks</text>
+        <rect class="box" x="245" y="134" width="340" height="30" rx="7"/><text x="260" y="154">3  Deobfuscation (base64, URL, Unicode, quotes)</text>
+        <rect class="box" x="245" y="170" width="340" height="30" rx="7"/><text x="260" y="190">4  Command, file and SQL guard</text>
+        <rect class="box" x="245" y="206" width="340" height="30" rx="7"/><text x="260" y="226">5  Destination and data-leak guard</text>
+        <rect class="box" x="245" y="242" width="340" height="30" rx="7"/><text x="260" y="262">6  Prompt-injection scan</text>
+        <rect class="box" x="245" y="278" width="340" height="30" rx="7"/><text x="260" y="298">7  Runtime context (source, limits, rate)</text>
+      </g>
+      <text x="415" y="332" text-anchor="middle" class="sub">Policy engine reads the versioned policy from the database</text>
+      <path class="line lok" d="M610 120H690" marker-end="url(#ar)"/>
+      <path class="line" d="M610 185H690" marker-end="url(#ar)"/>
+      <path class="line lbad" d="M610 250H690" marker-end="url(#ar)"/>
+      <rect class="box" x="695" y="92" width="290" height="56" rx="10"/><text x="710" y="116" font-weight="600" fill="var(--ok)">ALLOW</text><text x="710" y="135" class="sub">runs in the execution harness</text>
+      <rect class="box" x="695" y="157" width="290" height="56" rx="10"/><text x="710" y="181" font-weight="600" fill="var(--warn)">REVIEW</text><text x="710" y="200" class="sub">held in the human approval queue</text>
+      <rect class="box" x="695" y="222" width="290" height="56" rx="10"/><text x="710" y="246" font-weight="600" fill="var(--bad)">BLOCK</text><text x="710" y="265" class="sub">stopped with a reason</text>
+      <path class="line" d="M840 278V318" marker-end="url(#ar)"/>
+      <rect class="box" x="695" y="322" width="290" height="58" rx="10"/><text x="710" y="346" font-weight="600">SQLite audit log</text><text x="710" y="365" class="sub">AES-256-GCM encrypted, hash-chained</text>
+    </svg>
+
+    <div class="cols">
+      <div><h3>Functional requirements</h3><ul>
+        <li>Intercept every tool call before it runs and return allow, review or block with a reason.</li>
+        <li>Enforce per-agent tool permissions, parameter schemas and destination allowlists.</li>
+        <li>Decode obfuscated payloads before checking them.</li>
+        <li>Detect destructive commands, SQL abuse, data exfiltration, SSRF and prompt injection.</li>
+        <li>Hold risky calls in an approval queue until an admin approves or rejects them.</li>
+        <li>Log every decision; let admins view, filter and verify the log.</li>
+        <li>Measure accuracy, false-positive rate and latency on a labelled test set.</li>
+      </ul></div>
+      <div><h3>Non-functional requirements</h3><ul>
+        <li>Default deny: anything not explicitly allowed is blocked.</li>
+        <li>Low latency: inspection under 5 ms per call (p95).</li>
+        <li>Agents authenticate with hashed API keys; admins with signed session tokens.</li>
+        <li>Audit payloads encrypted at rest; tampering detected by a hash chain.</li>
+        <li>Policy changes are versioned and validated before they apply.</li>
+      </ul></div>
+      <div><h3>Data model</h3><ul>
+        <li><code>agents</code>: name, key_hash, key_prefix, created_at</li>
+        <li><code>audit_log</code>: ts, agent, tool, decision, risk, reason, latency_ms, payload_enc, findings_json, prev_hash, row_hash</li>
+        <li><code>approvals</code>: audit_id, agent, tool, reason, payload_enc, status, decided_at, result</li>
+        <li><code>policy_versions</code>: ts, author, policy_json</li>
+        <li><code>eval_runs</code>: ts, total, accuracy, recall, fpr, avg_ms, p95_ms</li>
+      </ul></div>
+      <div><h3>Tech stack and roadmap</h3><ul>
+        <li>Node.js 22 HTTP server, built-in SQLite and crypto, no third-party packages.</li>
+        <li>Vanilla JS dashboard served by the same server.</li>
+        <li>CI with GitHub Actions running the test suite; Docker image for deployment.</li>
+        <li>Next: an ML classifier for injection, notifications for pending approvals, per-tenant policies, Postgres.</li>
+      </ul></div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="engine.js"></script>
+<script>
+/* =====================================================================
+   Dashboard. Talks to the ToolGate server when it is running,
+   otherwise runs the same engine in the browser (offline demo mode).
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+let toastT;
+function toast(m) { const t = $('toast'); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3000); }
+const WORD = { ALLOW: 'ALLOWED', BLOCK: 'BLOCKED', REVIEW: 'NEEDS REVIEW' };
+const STATUS_TXT = { pass: 'passed', info: 'noted', review: 'flagged', block: 'blocked', skip: 'not reached' };
+
+/* ---------------- storage helpers (offline mode) ---------------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+/* ---------------- API adapter ---------------- */
+const API = {
+  mode: 'offline', token: null,
+  localPolicy: null, localAudit: [], localApprovals: [], rate: { calls: {} },
+  async init() {
+    try {
+      const r = await fetch('v1/health', { cache: 'no-store' });
+      if (r.ok && (await r.json()).service === 'toolgate') this.mode = 'server';
+    } catch (e) {}
+    if (this.mode === 'offline') {
+      this.localPolicy = store.get('tg-policy', null) || JSON.parse(JSON.stringify(DEFAULT_POLICY));
+      this.localAudit = store.get('tg-audit', []);
+      this.localApprovals = store.get('tg-approvals', []);
+    } else {
+      try { this.token = sessionStorage.getItem('tg-token'); } catch (e) {}
+    }
+  },
+  async req(method, path, body) {
+    const r = await fetch(path, { method, headers: { Authorization: 'Bearer ' + this.token, 'Content-Type': 'application/json' }, body });
+    let j = {}; try { j = await r.json(); } catch (e) {}
+    if (r.status === 401) { showLogin(); throw new Error('Your session ended. Sign in again.'); }
+    if (!r.ok) throw new Error(j.error || `Request failed (${r.status})`);
+    return j;
+  },
+  async login(pw) {
+    const r = await fetch('v1/login', { method: 'POST', body: JSON.stringify({ password: pw }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Sign-in failed');
+    this.token = j.token; try { sessionStorage.setItem('tg-token', j.token); } catch (e) {}
+  },
+  async inspect(raw) {
+    if (this.mode === 'server') return this.req('POST', 'v1/lab/inspect', raw);
+    const t0 = performance.now();
+    let call = null, r;
+    try { call = JSON.parse(raw); } catch (e) {}
+    if (!call) r = { decision: 'BLOCK', risk: 100, reason: 'Malformed request: body is not valid JSON', findings: [{ stage: 'identity', severity: 'block', rule: 'Malformed request', msg: 'Body is not valid JSON' }], stages: [] };
+    else r = inspect(call, { policy: this.localPolicy, raw, state: this.rate });
+    const latency = performance.now() - t0;
+    const out = { decision: r.decision, risk: r.risk, reason: r.reason, latency_ms: +latency.toFixed(3), stages: r.stages, deobf: r.deobf };
+    if (r.decision === 'ALLOW') out.result = simulate(call);
+    const id = (this.localAudit[0]?.id || 0) + 1;
+    this.localAudit.unshift({ id, ts: new Date().toISOString(), source: 'lab', agent: call?.agent, tool: call?.tool, decision: r.decision, risk: r.risk, reason: r.reason, latency_ms: latency, payload: raw, findings: r.findings });
+    this.localAudit = this.localAudit.slice(0, 300);
+    store.set('tg-audit', this.localAudit);
+    out.audit_id = id;
+    if (r.decision === 'REVIEW') {
+      const aid = (this.localApprovals[0]?.id || 0) + 1;
+      this.localApprovals.unshift({ id: aid, audit_id: id, ts: new Date().toISOString(), agent: call.agent, tool: call.tool, reason: r.reason, status: 'pending', payload: raw });
+      store.set('tg-approvals', this.localApprovals);
+      out.approval_id = aid;
+    }
+    return out;
+  },
+  async approvals() {
+    if (this.mode === 'server') return this.req('GET', 'v1/approvals');
+    return this.localApprovals;
+  },
+  async decide(id, approve) {
+    if (this.mode === 'server') return this.req('POST', `v1/approvals/${id}/${approve ? 'approve' : 'reject'}`, '');
+    const a = this.localApprovals.find(x => x.id === id);
+    if (!a || a.status !== 'pending') throw new Error('That request was already decided');
+    Object.assign(a, { status: approve ? 'approved' : 'rejected', decided_at: new Date().toISOString(), decided_by: 'admin', result: approve ? simulate(JSON.parse(a.payload)) : null });
+    const aid = (this.localAudit[0]?.id || 0) + 1;
+    this.localAudit.unshift({ id: aid, ts: a.decided_at, source: 'approval', agent: a.agent, tool: a.tool, decision: approve ? 'ALLOW' : 'BLOCK', risk: 0, reason: `${approve ? 'Approved' : 'Rejected'} by admin (review #${id})`, latency_ms: 0, payload: a.payload, findings: [] });
+    store.set('tg-approvals', this.localApprovals); store.set('tg-audit', this.localAudit);
+    return a;
+  },
+  async audit(decision) {
+    if (this.mode === 'server') return this.req('GET', 'v1/audit?limit=200' + (decision ? '&decision=' + decision : ''));
+    return this.localAudit.filter(a => !decision || a.decision === decision);
+  },
+  async stats() {
+    if (this.mode === 'server') return this.req('GET', 'v1/stats');
+    const a = this.localAudit, c = d => a.filter(x => x.decision === d).length;
+    return { total: a.length, allow: c('ALLOW'), block: c('BLOCK'), review: c('REVIEW'), avg_latency_ms: a.length ? a.reduce((s, x) => s + x.latency_ms, 0) / a.length : 0, pending: this.localApprovals.filter(x => x.status === 'pending').length };
+  },
+  async verify() { return this.mode === 'server' ? this.req('GET', 'v1/audit/verify') : null; },
+  async clear() {
+    if (this.mode === 'server') return this.req('DELETE', 'v1/audit');
+    this.localAudit = []; store.set('tg-audit', []);
+    this.localApprovals = []; store.set('tg-approvals', []);
+  },
+  async policy() {
+    if (this.mode === 'server') return this.req('GET', 'v1/policy');
+    return { policy: this.localPolicy, version: null, agents: [] };
+  },
+  async savePolicy(text) {
+    if (this.mode === 'server') return this.req('PUT', 'v1/policy', text);
+    const p = JSON.parse(text);
+    if (!p.agents || !p.tools || !p.global) throw new Error('Policy needs "agents", "tools" and "global"');
+    for (const [n, a] of Object.entries(p.agents)) for (const t of a.tools || []) if (!p.tools[t]) throw new Error(`Agent "${n}" uses unknown tool "${t}"`);
+    this.localPolicy = p; store.set('tg-policy', p); return { ok: true };
+  },
+  async evaluate() { return this.mode === 'server' ? this.req('POST', 'v1/eval') : runSuite(this.localPolicy); }
+};
+
+/* ---------------- tabs ---------------- */
+let currentTab = 'lab';
+function showTab(name) {
+  currentTab = name;
+  document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === name));
+  document.querySelectorAll('[data-view]').forEach(v => v.hidden = v.dataset.view !== name);
+  if (name === 'audit') loadAudit();
+  if (name === 'approvals') loadApprovals();
+  if (name === 'eval' && !evalDone) runEval();
+  if (name === 'policy') loadPolicy();
+}
+document.querySelector('nav.tabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) showTab(b.dataset.tab); });
+
+/* ---------------- stats ---------------- */
+async function refreshStats() {
+  try {
+    const s = await API.stats();
+    $('stTotal').textContent = s.total; $('stBlock').textContent = s.block; $('stReview').textContent = s.review; $('stAllow').textContent = s.allow;
+    $('stLat').textContent = (s.avg_latency_ms || 0).toFixed(2);
+    const n = s.pending || 0; $('pendBadge').textContent = n; $('pendBadge').hidden = !n;
+  } catch (e) {}
+}
+
+/* ---------------- attack lab ---------------- */
+const CASES = TEST_CASES;
+function buildScenarios() {
+  const cats = [...new Set(CASES.map(c => c.cat))];
+  $('scenario').innerHTML = cats.map(cat => `<optgroup label="${esc(cat)}">${CASES.map((c, i) => c.cat === cat ? `<option value="${i}">${esc(c.name)}</option>` : '').join('')}</optgroup>`).join('');
+}
+function loadScenario(i) {
+  const c = CASES[i]; $('scenario').value = i;
+  $('req').value = c.raw ? c.raw.replace(/,"/g, ',\n  "').replace(/^\{/, '{\n  ').replace(/\}$/, '\n}') : JSON.stringify(c.call, null, 2);
+}
+$('scenario').addEventListener('change', () => { loadScenario(+$('scenario').value); send(); });
+$('randomBtn').onclick = () => { const atk = CASES.map((c, i) => [c, i]).filter(([c]) => c.expect === 'block'); loadScenario(atk[Math.random() * atk.length | 0][1]); send(); };
+$('fmtBtn').onclick = () => { try { $('req').value = JSON.stringify(JSON.parse($('req').value), null, 2); } catch (e) { toast('That is not valid JSON yet: ' + e.message); } };
+$('sendBtn').onclick = send;
+
+async function send() {
+  const btn = $('sendBtn'); btn.disabled = true;
+  try { renderVerdict(await API.inspect($('req').value)); refreshStats(); }
+  catch (e) { toast(e.message); }
+  finally { btn.disabled = false; }
+}
+
+function renderVerdict(r) {
+  const stages = r.stages && r.stages.length ? r.stages : (typeof STAGES !== 'undefined' ? STAGES.map(s => ({ ...s, status: 'skip', findings: [] })) : []);
+  let halted = false;
+  const track = stages.map((s, i) => {
+    let status = s.status;
+    if (halted && status === 'pass') status = 'skip';
+    if (s.id === 'identity' && status === 'block') halted = true;
+    const fs = (s.findings || []).map(f => `<li><b>${esc(f.rule)}:</b> ${esc(f.msg)}</li>`).join('');
+    const icon = status === 'block' ? '✕' : status === 'review' ? '!' : status === 'info' ? 'i' : status === 'skip' ? '–' : '✓';
+    return `<li class="${status}"><span class="node">${icon}</span><div><div class="sname">${i + 1}. ${esc(s.name)}<span>${STATUS_TXT[status]}</span></div>${fs ? `<ul class="find">${fs}</ul>` : ''}</div></li>`;
+  }).join('');
+  const deobf = r.deobf && r.deobf.length ? `<div class="box"><h3>What the gateway decoded</h3>${r.deobf.map(d => `<div class="dec-row"><small>${esc(d.path)}</small><code class="from">${esc(d.original)}</code><code>${esc(d.decoded)}</code></div>`).join('')}</div>` : '';
+  const result = r.result ? `<div class="box"><h3>Execution harness output (simulated sandbox)</h3><pre>${esc(r.result)}</pre></div>`
+    : `<div class="box"><h3>Execution</h3><pre>${r.decision === 'REVIEW' ? 'Held. Nothing ran; waiting for a human to approve.' : 'Stopped. The tool never ran.'}</pre></div>`;
+  $('verdict').innerHTML = `
+    <div class="vhead">
+      <div class="word ${r.decision}">${WORD[r.decision]}</div>
+      <div class="vmeta"><div><b>${r.risk}</b><small>Risk / 100</small></div><div><b>${Number(r.latency_ms).toFixed(2)}</b><small>ms</small></div></div>
+    </div>
+    <div class="meter" aria-hidden="true"><i style="width:${r.risk}%"></i></div>
+    <p class="reason">${esc(r.reason)}</p>
+    <ol class="track">${track}</ol>
+    ${r.approval_id ? `<div class="held"><p>Held for human approval as request <b>#${esc(r.approval_id)}</b>.</p><button id="goApprovals">Open approvals</button></div>` : ''}
+    ${deobf}${result}
+    <p class="hint">Logged as audit record #${esc(r.audit_id)}.</p>`;
+  const g = $('goApprovals'); if (g) g.onclick = () => showTab('approvals');
+}
+
+/* ---------------- audit ---------------- */
+let lastAudit = [];
+$('auditFilter').onchange = loadAudit;
+async function loadAudit() {
+  $('auditNote').textContent = API.mode === 'server'
+    ? 'Stored in SQLite. Payloads are encrypted with AES-256-GCM and each record is hash-chained to the one before it.'
+    : 'Offline demo: records are kept in this browser only. Run the server for the encrypted database.';
+  $('verifyBtn').hidden = API.mode !== 'server';
+  try {
+    lastAudit = await API.audit($('auditFilter').value);
+    $('auditList').innerHTML = lastAudit.length ? lastAudit.map(a => `
+      <details>
+        <summary><span class="pill ${a.decision}">${a.decision}</span>
+          <div style="min-width:0"><div class="who">${esc(a.agent || 'unknown')} → ${esc(a.tool || '?')} <span class="mut" style="font-weight:400">· risk ${a.risk}</span></div><div class="why">${esc(a.reason)}</div></div>
+          <div class="when">#${a.id}<br>${new Date(a.ts).toLocaleTimeString()}</div></summary>
+        <div class="body">
+          <div class="box"><h3>Request</h3><pre>${esc(prettify(a.payload))}</pre></div>
+          ${a.findings && a.findings.length ? `<div class="box"><h3>Findings</h3><pre>${esc(a.findings.map(f => `[${f.severity}] ${f.rule}: ${f.msg}`).join('\n'))}</pre></div>` : ''}
+          <p class="hint">Source: ${esc(a.source)} · ${Number(a.latency_ms).toFixed(3)} ms${a.row_hash ? ' · hash ' + esc(a.row_hash.slice(0, 16)) + '…' : ''}</p>
+        </div>
+      </details>`).join('')
+      : '<div class="empty">No records yet. Send a tool call from the Attack lab and it will appear here.</div>';
+  } catch (e) { toast(e.message); }
+}
+const prettify = s => { try { return JSON.stringify(JSON.parse(s), null, 2); } catch (e) { return s; } };
+$('verifyBtn').onclick = async () => {
+  try { const v = await API.verify(); toast(v.ok ? `Integrity verified: ${v.checked} records, chain unbroken` : `Tampering detected at record #${v.broken_at}`); } catch (e) { toast(e.message); }
+};
+$('copyAuditBtn').onclick = async () => {
+  const text = JSON.stringify(lastAudit, null, 2);
+  try { await navigator.clipboard.writeText(text); toast('Audit log copied'); } catch (e) { toast('Copy was blocked by the browser'); }
+};
+$('clearBtn').onclick = () => { $('clearYes').hidden = false; setTimeout(() => $('clearYes').hidden = true, 4000); };
+$('clearYes').onclick = async () => { $('clearYes').hidden = true; try { await API.clear(); loadAudit(); refreshStats(); toast('Audit log cleared'); } catch (e) { toast(e.message); } };
+
+/* ---------------- evaluation ---------------- */
+let evalDone = false;
+$('evalBtn').onclick = runEval;
+async function runEval() {
+  $('evalBtn').disabled = true;
+  try {
+    const r = await API.evaluate(); evalDone = true;
+    const pct = x => (x * 100).toFixed(1) + '%';
+    $('evalNote').textContent = `${r.total} labelled cases (${r.tp + r.fn} attacks, ${r.tn + r.fp} safe calls) written by the team, run against the current policy.`;
+    $('evalTiles').innerHTML = [
+      ['Attacks caught', pct(r.recall), r.recall >= 0.95], ['False-positive rate', pct(r.fpr), r.fpr <= 0.05], ['Accuracy', pct(r.accuracy), r.accuracy >= 0.95],
+      ['Avg latency', r.avg.toFixed(2) + ' ms', r.avg < 5], ['p95 latency', r.p95.toFixed(2) + ' ms', r.p95 < 5]
+    ].map(([l, v, g]) => `<div class="tile ${g ? 'good' : ''}"><b>${v}</b><small>${l}</small></div>`).join('');
+    $('cm').innerHTML = `<div class="cm">
+      <div class="h"></div><div class="h">Gateway stopped it</div><div class="h">Gateway allowed it</div>
+      <div class="h">Attack</div><div class="v ok">${r.tp}</div><div class="v ${r.fn ? 'bad' : ''}">${r.fn}</div>
+      <div class="h">Safe call</div><div class="v ${r.fp ? 'bad' : ''}">${r.fp}</div><div class="v ok">${r.tn}</div></div>`;
+    const cats = {};
+    r.rows.forEach(x => { const c = (cats[x.cat] = cats[x.cat] || { n: 0, ok: 0 }); c.n++; if (x.correct) c.ok++; });
+    $('catTable').innerHTML = '<tr><th>Category</th><th class="num">Correct</th><th></th></tr>' + Object.entries(cats).map(([k, c]) =>
+      `<tr><td>${esc(k)}</td><td class="num">${c.ok} / ${c.n}</td><td><div class="bar"><i style="width:${c.ok / c.n * 100}%"></i></div></td></tr>`).join('');
+    $('caseTable').innerHTML = '<tr><th>Case</th><th>Expected</th><th>Got</th><th>Reason</th><th class="num">ms</th></tr>' + r.rows.map(x =>
+      `<tr><td>${esc(x.name)}<br><span class="mut">${esc(x.cat)}</span></td><td>${x.expect === 'block' ? 'stop' : 'allow'}</td><td><span class="pill ${x.decision}">${x.decision}</span> ${x.correct ? '<span class="ok">✓</span>' : '<span class="bad">✕</span>'}</td><td class="mut">${esc(x.reason)}</td><td class="num">${x.ms.toFixed(2)}</td></tr>`).join('');
+  } catch (e) { toast(e.message); }
+  finally { $('evalBtn').disabled = false; }
+}
+
+/* ---------------- policy ---------------- */
+async function loadPolicy() {
+  try {
+    const { policy, version, agents } = await API.policy();
+    $('policyNote').textContent = API.mode === 'server'
+      ? `Version ${version ? version.id : 1}, saved ${version ? new Date(version.ts).toLocaleString() : ''}. Every save is stored as a new version.`
+      : 'Offline demo: changes are saved in this browser only.';
+    const keyFor = n => (agents || []).find(a => a.name === n);
+    $('agentCards').innerHTML = Object.entries(policy.agents).map(([n, a]) => {
+      const k = keyFor(n);
+      const rows = [
+        a.email_domains && ['Email domains', a.email_domains.join(', ')],
+        a.http_hosts && ['Web hosts', a.http_hosts.join(', ')],
+        a.shell_commands && ['Shell commands', a.shell_commands.join(', ')],
+        a.file_roots && ['File folders', a.file_roots.join(', ')],
+        a.db_tables && ['Database', `${a.db_mode === 'read_only' ? 'read-only' : 'read/write'}: ${a.db_tables.join(', ')}`],
+        a.transfer_limit && ['Payments', `review above ₹${a.transfer_review_above.toLocaleString('en-IN')}, hard limit ₹${a.transfer_limit.toLocaleString('en-IN')}`],
+        k && ['API key', k.key_prefix + '…']
+      ].filter(Boolean);
+      return `<div class="agent"><h3>${esc(n)}</h3><p class="mut" style="margin:0;font-size:13px">${esc(a.description || '')}</p>
+        <div class="tags">${a.tools.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>
+        <div class="kv">${rows.map(([l, v]) => `<div><span>${esc(l)}:</span> ${esc(v)}</div>`).join('')}</div></div>`;
+    }).join('');
+    if (document.activeElement !== $('policyText')) $('policyText').value = JSON.stringify(policy, null, 2);
+  } catch (e) { toast(e.message); }
+}
+$('savePolicyBtn').onclick = async () => {
+  $('policyErr').hidden = true;
+  try {
+    JSON.parse($('policyText').value);
+    const r = await API.savePolicy($('policyText').value);
+    evalDone = false; loadPolicy();
+    toast(r.new_agent_keys && r.new_agent_keys.length ? `Policy saved. New key for ${r.new_agent_keys.map(k => k.name).join(', ')} is in data/agent-keys.txt` : 'Policy saved');
+  } catch (e) { $('policyErr').textContent = e.message; $('policyErr').hidden = false; }
+};
+$('resetPolicyBtn').onclick = () => { $('policyText').value = JSON.stringify(DEFAULT_POLICY, null, 2); toast('Default policy loaded into the editor. Save to apply it.'); };
+
+/* ---------------- approvals ---------------- */
+function reqCard(a, pending) {
+  const when = new Date(pending ? a.ts : a.decided_at || a.ts).toLocaleTimeString();
+  return `<div class="req">
+    <div class="req-head"><b>#${a.id} · ${esc(a.agent)} → ${esc(a.tool)}</b><span class="pill ${a.status}">${a.status.toUpperCase()}</span></div>
+    <p class="why">${esc(a.reason)}</p>
+    <div class="box"><h3>Request</h3><pre>${esc(prettify(a.payload))}</pre></div>
+    ${a.result ? `<div class="box"><h3>Execution harness output (simulated sandbox)</h3><pre>${esc(a.result)}</pre></div>` : ''}
+    ${pending ? `<div class="row"><button class="approve" data-approve="${a.id}">Approve and run</button><button class="reject" data-reject="${a.id}">Reject</button><span class="hint">Waiting since ${when}</span></div>`
+      : `<p class="hint">${a.status === 'approved' ? 'Approved' : 'Rejected'} by ${esc(a.decided_by || 'admin')} at ${when}</p>`}
+  </div>`;
+}
+async function loadApprovals() {
+  try {
+    const all = await API.approvals();
+    const pend = all.filter(a => a.status === 'pending'), done = all.filter(a => a.status !== 'pending').slice(0, 10);
+    $('pendList').innerHTML = pend.length ? pend.map(a => reqCard(a, true)).join('')
+      : '<div class="empty">Nothing is waiting. Try the scenario "Pay an approved vendor" with an amount of 32000.</div>';
+    $('doneList').innerHTML = done.length ? done.map(a => reqCard(a, false)).join('') : '<div class="empty">No decisions yet.</div>';
+  } catch (e) { toast(e.message); }
+}
+$('pendList').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-approve],button[data-reject]'); if (!b) return;
+  const id = +(b.dataset.approve || b.dataset.reject), ok = !!b.dataset.approve;
+  b.disabled = true;
+  try { await API.decide(id, ok); toast(ok ? `Request #${id} approved and run` : `Request #${id} rejected`); loadApprovals(); refreshStats(); }
+  catch (err) { toast(err.message); b.disabled = false; }
+});
+
+/* live refresh while the server is running (e.g. during npm run agent) */
+setInterval(() => {
+  if (API.mode !== 'server' || !API.token || document.visibilityState !== 'visible' || !$('login').hidden) return;
+  refreshStats();
+  if (currentTab === 'approvals' && !$('pendList').querySelector('button:disabled')) loadApprovals();
+  if (currentTab === 'audit' && !$('auditList').querySelector('details[open]')) loadAudit();
+}, 3000);
+
+/* ---------------- login ---------------- */
+function showLogin() { $('login').hidden = false; $('pw').focus(); }
+$('loginForm').addEventListener('submit', async e => {
+  e.preventDefault(); $('loginErr').hidden = true;
+  try { await API.login($('pw').value); $('login').hidden = true; $('pw').value = ''; start(); }
+  catch (err) { $('loginErr').textContent = err.message; $('loginErr').hidden = false; }
+});
+$('logoutBtn').onclick = () => { API.token = null; try { sessionStorage.removeItem('tg-token'); } catch (e) {} showLogin(); };
+
+/* ---------------- boot ---------------- */
+async function start() {
+  refreshStats();
+  send();
+}
+(async () => {
+  buildScenarios();
+  loadScenario(CASES.findIndex(c => c.name.startsWith('Base64')));
+  await API.init();
+  const live = API.mode === 'server';
+  $('modeChip').classList.toggle('live', live);
+  $('modeChip').lastElementChild.textContent = live ? 'Live server' : 'Offline demo';
+  $('logoutBtn').hidden = !live;
+  if (live && !API.token) return showLogin();
+  start();
+})();
+</script>
+</body>
+</html>
